@@ -35,6 +35,27 @@ def calc_orientation(org: pg.Rect, dst: pg.Rect) -> tuple[float, float]:
     norm = math.sqrt(x_diff**2+y_diff**2)
     return x_diff/norm, y_diff/norm
 
+class Gravity(pg.sprite.Sprite):
+    def __init__(self,bird,size:int,life:int):
+        super().__init__()
+        self.size = size
+        self.image= pg.Surface((2*self.size,2*self.size))
+        pg.draw.circle(self.image,(10,10,10),(self.size,self.size),self.size)
+        self.image.set_alpha(200)
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.center = bird.rect.center
+        self.life = life
+
+    def update(self):
+        """
+        爆発時間を1減算した爆発経過時間_lifeに応じて爆発画像を切り替えることで
+        爆発エフェクトを表現する
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+
 
 class Bird(pg.sprite.Sprite):
     """
@@ -71,6 +92,9 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = xy
         self.speed = 10
+        # 追加機能4：肉体強化
+        self.state = "normal"
+        self.hyper_life = -1
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -86,6 +110,15 @@ class Bird(pg.sprite.Sprite):
             self.speed = 20
         else:
             self.speed = 10
+    # 追加機能4：肉体強化
+    def change_state(self, state:str, life:int):
+        """
+        こうかとんの無敵状態判定
+        引数1：こうかとんの状態を表す (normal or hyper)
+        引数2：無敵フレームを表す
+        """
+        self.state = state
+        self.hyper_life = life
 
     def update(self, key_lst: list[bool], screen: pg.Surface):
         """
@@ -106,12 +139,17 @@ class Bird(pg.sprite.Sprite):
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
             self.dire = tuple(sum_mv)
             self.image = self.imgs[self.dire]
+        # 追加機能4：肉体強化
+        if self.state == "hyper":   # もしhyper状態なら
+            self.hyper_life -= 1    # 無敵のフレームを減少させる
+            self.image = pg.transform.laplacian(self.image) # 無敵状態画像に切り替え
+        if self.hyper_life < 0:     # もしフレームが0になったなら、元に戻る
+            self.change_state("normal", -1)
         screen.blit(self.image, self.rect)
     
     def get_direction(self) -> tuple[int, int]:
         return self.dire
     
-
 class Bomb(pg.sprite.Sprite):
     """
     爆弾に関するクラス
@@ -266,6 +304,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravitys = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -277,6 +316,15 @@ def main():
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
             bird.speedup(event.type == pg.KEYDOWN and event.key == pg.K_LSHIFT)#左シフトでスピードアップ
+            # 追加機能4：肉体強化
+            if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT:
+                if score.score > 100: # RSHIFTキー and score > 100
+                    bird.change_state("hyper", 500) # chage_state呼び出し
+                    score.score_up(-100) # score - 100
+            if event.type == pg.KEYDOWN and event.key == pg.K_TAB:
+                if score.score >= 50:
+                    gravitys.add(Gravity(bird,200,500))
+                    score.score -= 50
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -292,9 +340,27 @@ def main():
             score.score_up(10)  # 10点アップ
             bird.change_img(6, screen)  # こうかとん喜びエフェクト
 
-        for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
+        for bomb in pg.sprite.groupcollide(bombs, beams, True , True).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.score_up(1)  # 1点アップ
+
+        for bomb in pg.sprite.groupcollide(bombs, gravitys, True , False).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.score_up(1)  # 1点アップ
+
+        # if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
+        # 追加機能4：肉体強化
+        # 衝突判定
+        for bomb in pg.sprite.spritecollide(bird, bombs, True):
+            if bird.state == "normal": # もしnormal状態なら
+                bird.change_img(8, screen) # こうかとん悲しみエフェクト
+                score.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
+            if bird.state == "hyper": # もしhyper状態ならば
+                exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+                score.score_up(1)  # 1点アップ
 
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
             bird.change_img(8, screen) # こうかとん悲しみエフェクト
@@ -302,7 +368,8 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
-
+        gravitys.update()
+        gravitys.draw(screen)
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
@@ -313,6 +380,7 @@ def main():
         exps.update()
         exps.draw(screen)
         score.update(screen)
+        
         pg.display.update()
         tmr += 1
         clock.tick(50)
