@@ -247,6 +247,34 @@ class Score:
     def update(self, screen: pg.Surface):
         self.image = self.font.render(f"Score: {self.score}", 0, self.color)
         screen.blit(self.image, self.rect)
+        
+        
+class NeoGravity(pg.sprite.Sprite):
+    """
+    画面全体を覆う重力場を発生させる
+    • 重力球：透明度のある黒い矩形（画面全体）
+    • 発動時間：400フレーム
+    • 効果：重力球の範囲内の爆弾を打ち落とす
+    • 発動条件：リターンキー押下，かつ，スコアが200より大
+    • 消費スコア：200
+    """
+    def __init__(self):
+        radh = HEIGHT
+        radw = WIDTH
+        color = (0,0,0)
+        self.life = 400
+        self.image = pg.Surface((radh, radw))
+        pg.draw.circle(self.image, color,(radh, radh), radw)
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+        
+    def update(self):
+        """
+        updateメソッドで発動時間を1減算し，0未満になったらkill
+        """
+        self.life -= 1    
+        if self.life >= 0:
+            self.kill()
 
 
 def main():
@@ -254,12 +282,12 @@ def main():
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     bg_img = pg.image.load("ex04/fig/pg_bg.jpg")
     score = Score()
-
     bird = Bird(3, (900, 400))
     bombs = pg.sprite.Group()
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    NeoGravitys = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -270,6 +298,10 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN and score.score >= 0:#200に戻す
+                NeoGravitys.add(NeoGravity(screen))#重力場の呼び出し
+                score.score -= 200
+                
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -288,6 +320,15 @@ def main():
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.score_up(1)  # 1点アップ
+        
+        for NeoGravitys in pg.sprite.groupcollide(bombs, beams, True, True).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.score_up(1)  # 1点アップ
+            
+        for NeoGravitys in pg.sprite.groupcollide(emys, beams, True, True).keys():
+            exps.add(Explosion(emy, 100))  # 爆発エフェクト
+            score.score_up(10)  # 10点アップ
+            bird.change_img(6, screen)  # こうかとん喜びエフェクト
 
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
             bird.change_img(8, screen) # こうかとん悲しみエフェクト
@@ -303,6 +344,8 @@ def main():
         emys.draw(screen)
         bombs.update()
         bombs.draw(screen)
+        NeoGravitys.update()
+        NeoGravitys.draw(screen)
         exps.update()
         exps.draw(screen)
         score.update(screen)
