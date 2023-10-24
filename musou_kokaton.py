@@ -105,6 +105,11 @@ class Bird(pg.sprite.Sprite):
         self.image = pg.transform.rotozoom(pg.image.load(f"ex04/fig/{num}.png"), 0, 2.0)
         screen.blit(self.image, self.rect)
 
+    def speedup(self,flag):
+        if flag:
+            self.speed = 20
+        else:
+            self.speed = 10
     # 追加機能4：肉体強化
     def change_state(self, state:str, life:int):
         """
@@ -310,6 +315,7 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            bird.speedup(event.type == pg.KEYDOWN and event.key == pg.K_LSHIFT)#左シフトでスピードアップ
             # 追加機能4：肉体強化
             if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT:
                 if score.score > 100: # RSHIFTキー and score > 100
