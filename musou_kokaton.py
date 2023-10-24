@@ -35,6 +35,27 @@ def calc_orientation(org: pg.Rect, dst: pg.Rect) -> tuple[float, float]:
     norm = math.sqrt(x_diff**2+y_diff**2)
     return x_diff/norm, y_diff/norm
 
+class Gravity(pg.sprite.Sprite):
+    def __init__(self,bird,size:int,life:int):
+        super().__init__()
+        self.size = size
+        self.image= pg.Surface((2*self.size,2*self.size))
+        pg.draw.circle(self.image,(10,10,10),(self.size,self.size),self.size)
+        self.image.set_alpha(200)
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.center = bird.rect.center
+        self.life = life
+
+    def update(self):
+        """
+        爆発時間を1減算した爆発経過時間_lifeに応じて爆発画像を切り替えることで
+        爆発エフェクトを表現する
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+
 
 class Bird(pg.sprite.Sprite):
     """
@@ -260,6 +281,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravitys = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -270,6 +292,10 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_TAB:
+                if score.score >= 50:
+                    gravitys.add(Gravity(bird,200,500))
+                    score.score -= 50
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -285,7 +311,11 @@ def main():
             score.score_up(10)  # 10点アップ
             bird.change_img(6, screen)  # こうかとん喜びエフェクト
 
-        for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
+        for bomb in pg.sprite.groupcollide(bombs, beams, True , True).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.score_up(1)  # 1点アップ
+
+        for bomb in pg.sprite.groupcollide(bombs, gravitys, True , False).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.score_up(1)  # 1点アップ
 
@@ -295,7 +325,8 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
-
+        gravitys.update()
+        gravitys.draw(screen)
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
@@ -306,6 +337,7 @@ def main():
         exps.update()
         exps.draw(screen)
         score.update(screen)
+        
         pg.display.update()
         tmr += 1
         clock.tick(50)
